@@ -1,2 +1,7 @@
-# DCI_ICO
-# Another project related to this code is currently in progress. We will make the code publicly available once the related project is completed. We appreciate your understanding and patience in this matter.
+Customized Generation Reimagined: Fidelity and Editability Harmonized
+
+
+
+ACKNOWLEDGEMENT
+
+Our code are based upon Stable Diffusion and Custom Diffusion
