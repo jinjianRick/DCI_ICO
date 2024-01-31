@@ -10,15 +10,16 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 
 
 class DDIMSampler(object):
-    def __init__(self, model, dci_type, schedule="linear", **kwargs):
+    def __init__(self, model, dci_type=None, schedule="linear", **kwargs):
         super().__init__()
-        if type(model)==list:
-            self.model_ldm = model[0]
-            self.model = model[1]
+            
+        if dci_type is not None:
+            self.model_ldm = 1
             self.dci_type = dci_type
         else:
             self.model_ldm = None
-            self.model = model
+            
+        self.model = model
         self.ddpm_num_timesteps = self.model.num_timesteps
         self.schedule = schedule
 
@@ -190,8 +191,12 @@ class DDIMSampler(object):
             if self.model_ldm is None:
                 img, pred_x0 = outs
             else:
-                img, pred_x0, img_ldm, pred_x0_ldm = outs
-                img_extra['img_ldm'] = img_ldm
+                if step/1000> 1 - extra_info['agg_time']:
+                    img, pred_x0, img_ldm, pred_x0_ldm = outs
+                    img_extra['img_ldm'] = img_ldm
+                else:
+                    img, pred_x0 = outs
+                    
             if callback: callback(i)
             if img_callback: img_callback(pred_x0, i)
 
@@ -220,32 +225,60 @@ class DDIMSampler(object):
                 e_t_uncond, e_t = self.model.apply_model(x_in, t_in, c_in).chunk(2)
                 e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
             else:
+                share_guidance = extra_info['share_guidance']
+                agg_time = extra_info['agg_time']
+                time_step = t[0].item()
                 if self.dci_type == 'same':
-                    print('use one fine-tuned model')
-                    info_dict_ldm = {"type": 'ldm', "mask_index":extra_info['mask_ldm'], "latent":{}, "pre_add": False, "length":extra_info['length_ldm'], 'sep_custom':False}
-                    info_dict_custom = {"type": 'custom', "mask_index":extra_info['mask_custom'], "latent":{}, "pre_add": False, "length":extra_info['length_custom'], "sep_custom":False}
-                    info_dict_custom = {"type": 'custom', "mask_ldm":extra_info['mask_ldm'], "mask_custom":extra_info['mask_custom'],  "length_ldm":extra_info['length_ldm'], "length_custom":extra_info['length_custom'], "sep_custom":False}
+                    #print('use one fine-tuned model')
+                    
+                    info_dict_custom = {"type": 'custom', "mask_ldm":extra_info['mask_ldm'], "mask_custom":extra_info['mask_custom'],  "length_ldm":extra_info['length_ldm'], "length_custom":extra_info['length_custom'], "sep_custom":False, "share_guidance": share_guidance, "time": time_step, "agg_time": agg_time, 'lambda': extra_info['lambda']}
 
                     x_in = torch.cat([x] * 2)
                     t_in = torch.cat([t] * 2)
-                    x_in_ldm = torch.cat([x_extra['img_ldm']] * 2)
-                    t_in_ldm = torch.cat([t] * 2)
-                    x_in = torch.cat([x_in, x_in_ldm], dim=0)
-                    t_in = torch.cat([t_in, t_in_ldm], dim=0)
-                    c_in = torch.cat([unconditional_conditioning, c, unconditional_conditioning, cond_ldm['ldm']])
+                    
+                    if time_step/1000 > 1-agg_time:
+                        if share_guidance:  
+                            x_in_ldm = x_extra['img_ldm']
+                            t_in_ldm = t
+                            c_in = torch.cat([unconditional_conditioning, c, cond_ldm['ldm']])
+                        else:    
+                            x_in_ldm = torch.cat([x_extra['img_ldm']] * 2)
+                            t_in_ldm = torch.cat([t] * 2)
+                            c_in = torch.cat([unconditional_conditioning, c, unconditional_conditioning, cond_ldm['ldm']])
+                        
+                        x_in = torch.cat([x_in, x_in_ldm], dim=0)
+                        t_in = torch.cat([t_in, t_in_ldm], dim=0)
+                    else:
+                        c_in = torch.cat([unconditional_conditioning, c])
+                    
                     tmp_e_t = self.model.apply_model(x_in, t_in, c_in, info_dict=info_dict_custom)
-                    e_t_uncond, e_t, e_t_uncond_ldm, e_t_ldm = tmp_e_t.chunk(4)
+                    
+                    if time_step/1000 > 1-agg_time:
+                        if share_guidance:
+                            e_t_uncond, e_t, e_t_ldm = tmp_e_t.chunk(3)
+                        else:
+                            e_t_uncond, e_t, e_t_uncond_ldm, e_t_ldm = tmp_e_t.chunk(4)
+                    else:
+                        e_t_uncond, e_t = tmp_e_t.chunk(2)
                 else:
-                    print('use two fine-tuned model')
+                    #print('use two fine-tuned model')
+                    pass
             
                 e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
-                e_t_ldm = e_t_uncond_ldm + unconditional_guidance_scale * (e_t_ldm - e_t_uncond_ldm)
+                    
+                if time_step/1000 > 1-agg_time:
+                    if share_guidance:
+                        e_t_ldm = e_t_uncond + unconditional_guidance_scale * (e_t_ldm - e_t_uncond)
+                    else:
+                        e_t_ldm = e_t_uncond_ldm + unconditional_guidance_scale * (e_t_ldm - e_t_uncond_ldm)
+                else:
+                    pass
          
         if score_corrector is not None:
             assert self.model.parameterization == "eps"
             e_t = score_corrector.modify_score(self.model, e_t, x, t, c, **corrector_kwargs)
 
-            if self.model_ldm is not None:
+            if self.model_ldm is not None and time_step/1000 > 1-agg_time:
                 e_t_ldm = score_corrector.modify_score(self.model_ldm, e_t_ldm, x_extra['img_ldm'], t, cond_ldm['ldm'], **corrector_kwargs) ###
 
         alphas = self.model.alphas_cumprod if use_original_steps else self.ddim_alphas
@@ -261,31 +294,31 @@ class DDIMSampler(object):
 
         # current prediction for x_0
         pred_x0 = (x - sqrt_one_minus_at * e_t) / a_t.sqrt()
-        if self.model_ldm is not None:
+        if self.model_ldm is not None and time_step/1000 > 1-agg_time:
             pred_x0_ldm = (x_extra['img_ldm'] - sqrt_one_minus_at * e_t_ldm) / a_t.sqrt()
 
         if quantize_denoised:
             pred_x0, _, *_ = self.model.first_stage_model.quantize(pred_x0)
-            if self.model_ldm is not None:
+            if self.model_ldm is not None and time_step/1000 > 1-agg_time:
                 pred_x0_ldm, _, *_ = self.model_ldm.first_stage_model.quantize(pred_x0_ldm)
         # direction pointing to x_t
         dir_xt = (1. - a_prev - sigma_t**2).sqrt() * e_t
-        if self.model_ldm is not None:
+        if self.model_ldm is not None and time_step/1000 > 1-agg_time:
             dir_xt_ldm = (1. - a_prev - sigma_t**2).sqrt() * e_t_ldm
         noise = sigma_t * noise_like(x.shape, device, repeat_noise) * temperature
-        if self.model_ldm is not None:
+        if self.model_ldm is not None and time_step/1000 > 1-agg_time:
             noise_ldm = sigma_t * noise_like(x_extra['img_ldm'].shape, device, repeat_noise) * temperature
         if noise_dropout > 0.:
             noise = torch.nn.functional.dropout(noise, p=noise_dropout)
-            if self.model_ldm is not None:
+            if self.model_ldm is not None and time_step/1000 > 1-agg_time:
                 noise_ldm = torch.nn.functional.dropout(noise_ldm, p=noise_dropout)
         x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
-        if self.model_ldm is not None:
+        if self.model_ldm is not None and time_step/1000 > 1-agg_time:
             x_prev_ldm = a_prev.sqrt() * pred_x0_ldm + dir_xt_ldm + noise_ldm
-        if self.model_ldm is None:
-            return x_prev, pred_x0
-        else:
+        if self.model_ldm is not None and time_step/1000 > 1-agg_time:
             return x_prev, pred_x0, x_prev_ldm, pred_x0_ldm
+        else:
+            return x_prev, pred_x0
 
     @torch.no_grad()
     def stochastic_encode(self, x0, t, use_original_steps=False, noise=None):
