@@ -191,17 +191,20 @@ class CustomDiffusion(LatentDiffusion):
             out = einsum('b i j, b j d -> b i d', attn, v)
             out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
 
-            if crossattn and prompt_dict['run_type']=='inference' and info_dict is not None:
+            if crossattn and prompt_dict['run_type']=='inference' and info_dict is not None and info_dict['time']/1000 > 1- info_dict['agg_time']:
+                share_guidance = info_dict['share_guidance']
                 if not info_dict['sep_custom']:
-                    print('One !')
                     attn = rearrange(attn, '(b h) n d -> b n (h d)', h=h)
-                    attn_uncond1 = attn[:int((out.shape[0])/4)]
-                    attn_cond1 = attn[int((out.shape[0])/4):-int((out.shape[0])/2)]
-                    attn_uncond2 = attn[int((out.shape[0])/2):-int((out.shape[0])/4)]
-                    attn_cond2 = attn[-int((out.shape[0])/4):]
-
-                    #attn_cond1 = attn[:int((out.shape[0])/2)]
-                    #attn_cond2 = attn[int((out.shape[0])/2):]
+                    
+                    if share_guidance:
+                        attn_uncond1 = attn[:int((out.shape[0])/3)]
+                        attn_cond1 = attn[int((out.shape[0])/3):-int((out.shape[0])/3)]
+                        attn_cond2 = attn[-int((out.shape[0])/3):]
+                    else:
+                        attn_uncond1 = attn[:int((out.shape[0])/4)]
+                        attn_cond1 = attn[int((out.shape[0])/4):-int((out.shape[0])/2)]
+                        attn_uncond2 = attn[int((out.shape[0])/2):-int((out.shape[0])/4)]
+                        attn_cond2 = attn[-int((out.shape[0])/4):]
 
                     attn_cond1 = rearrange(attn_cond1, 'b n (h d) -> (b h) n d ', h=h)
                     attn_cond2 = rearrange(attn_cond2, 'b n (h d) -> (b h) n d ', h=h)
@@ -210,8 +213,7 @@ class CustomDiffusion(LatentDiffusion):
                     atten_list2 = []
                     attn_cond1 = (10*attn_cond1[:, :, 1:1+info_dict['length_custom']]).softmax(dim=-1)
                     attn_cond2 = (10*attn_cond2[:, :, 1:1+info_dict['length_ldm']]).softmax(dim=-1)
-                    #attn_cond1 = attn_cond1[:, :, 1:info_dict['length']+1]
-                    #attn_cond2 = attn_cond2[:, :, 1:info_dict['length2']+1]
+
                     for index in info_dict['mask_custom']:
                         atten_list1.append(attn_cond1[:, :, index].unsqueeze(-1))
                     attn1 = torch.cat(atten_list1, dim=2).sum(dim=2)
@@ -225,33 +227,30 @@ class CustomDiffusion(LatentDiffusion):
                     attn1 = 500*(10*attn1).softmax(-1)
                     attn2 = 500*(10*attn2).softmax(-1)
 
-                    # tt: 1.4
-                    # sm: 0.9
-                    # dali tank 0.5 larger
-                    # cat_statue mountain 0
-                    # shoes ice 1
-                    # tt ice: 1.4
-                    # tt house 1.7 up 2.2 
-                    attn = torch.cat([(attn1.unsqueeze(dim=0)), -50*(attn2.unsqueeze(dim=0))], dim=0).softmax(dim=0)
+                    attn = torch.cat([(attn1.unsqueeze(dim=0)), info_dict['lambda']*(attn2.unsqueeze(dim=0))], dim=0).softmax(dim=0)
 
-                    out_uncond1 = out[:int((out.shape[0])/4)]
-                    out1 = out[int((out.shape[0])/4):-int((out.shape[0])/2)]
-                    out_uncond2 = out[int((out.shape[0])/2):-int((out.shape[0])/4)]
-                    out2 = out[-int((out.shape[0])/4):]
-                    # out1 = out[:int((out.shape[0])/2)]
-                    # out2 = out[-int((out.shape[0])/2):]
+                    if share_guidance:
+                        out_uncond1 = out[:int((out.shape[0])/3)]
+                        out1 = out[int((out.shape[0])/3):-int((out.shape[0])/3)]
+                        out2 = out[-int((out.shape[0])/3):]
+                    else:
+                        out_uncond1 = out[:int((out.shape[0])/4)]
+                        out1 = out[int((out.shape[0])/4):-int((out.shape[0])/2)]
+                        out_uncond2 = out[int((out.shape[0])/2):-int((out.shape[0])/4)]
+                        out2 = out[-int((out.shape[0])/4):]
 
                     out1 = rearrange(out1, 'b n (h d) -> (b h) n d', h=h)
                     out2 = rearrange(out2, 'b n (h d) -> (b h) n d', h=h)
-                    
                         
                     out1_tmp = attn[0].unsqueeze(-1)*out1 + attn[1].unsqueeze(-1)*out2
-                    #out1_tmp = out1 + 0.9*out2
-                    #out2_tmp = attn[0].unsqueeze(-1)*out1 + attn[1].unsqueeze(-1)*out2
+
                     out1_tmp = rearrange(out1_tmp, '(b h) n d -> b n (h d)', h=h)
                     out2 = rearrange(out2, '(b h) n d -> b n (h d)', h=h)
 
-                    out = torch.cat([out_uncond1, out1_tmp, out_uncond2, out2])
+                    if share_guidance:
+                        out = torch.cat([out_uncond1, out1_tmp, out2])
+                    else:
+                        out = torch.cat([out_uncond1, out1_tmp, out_uncond2, out2])
 
             return self.to_out(out)
 
@@ -267,25 +266,14 @@ class CustomDiffusion(LatentDiffusion):
 
         #########################################################
         self.re_weight = False
-        reweight = 2
-        self.weight_tuple = [(7,reweight), (8,reweight), (9,reweight), (10,reweight), (11,reweight), (12,reweight), (13,reweight), (14,reweight), (15,reweight) ] #leaf
-        self.weight_tuple = [(7,reweight), (8,reweight), (9,reweight), (10,reweight), (11,reweight), (12,reweight), (13,reweight)] #leaf
-        self.weight_tuple = [(7,reweight), (8,reweight), (9,reweight), (10,reweight), (11,reweight)]
-        #self.weight_tuple = [(7,reweight), (8,reweight), (9,reweight)]
-        #self.weight_tuple = [(7,reweight), (8,reweight), (9,reweight), (10,reweight), (11,reweight), (12,reweight), (13,reweight), (14,reweight), (15,reweight) ] #leaf
-        #self.weight_tuple = [(1,reweight), (2,reweight), (3,reweight), (4,reweight), (5,reweight), (6,reweight)]
-        #self.weight_tuple = [(3,3), (4,3), (5, 0.3), (6, 0.3), (7, 0.3)]
-
-        #########################################################
 
         if self.cond_stage_config.target == "ldm.modules.encoders.modules.BERTEmbedder":
             ctx_init = "Photo of"
             #ctx_init = None
-            figure_num = image_number
+            figure_num = self.figure_num
             ctx_dim = 1280
             n_ctx = 2
             dtype = torch.float32
-
 
             if ctx_init:
                 # use given words to initialize context vectors
@@ -314,7 +302,7 @@ class CustomDiffusion(LatentDiffusion):
                 prompts = prompt_prefix + " " + "*" + " " + self.class_name
             else:
                 prompts = prompt_prefix + " " + "*"
-            print('PROMPTS:', prompts)
+            print('aaa', prompts)
             tokenized_prompts = self.cond_stage_model.tknz_fn(prompts).to(self.device)
 
             with torch.no_grad():
@@ -407,7 +395,7 @@ class CustomDiffusion(LatentDiffusion):
                 if self.end_token:
                     prompts = prompt_prefix + " " + "* "*self.task_token + prompt_suffix
             
-            print('PROMPTS:', prompts)
+            print('prompt', prompts)
             tokenized_prompts = self.tokenizer(prompts, truncation=True, max_length=max_length, return_length=True,
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")["input_ids"].to(self.device)
 
@@ -435,8 +423,6 @@ class CustomDiffusion(LatentDiffusion):
         if self.add_class:
             self.prompt_dict['class_name'] = self.class_name
 
-        if self.re_weight:
-            self.prompt_dict['weight_tuple'] = self.weight_tuple
 
         self.prompt_dict['run_type'] = self.run_type
         self.prompt_dict['per_token'] = self.per_token
@@ -509,6 +495,7 @@ class CustomDiffusion(LatentDiffusion):
             if not self.end_token:
                 opt = torch.optim.AdamW([{"params": params, "lr": lr}, {"params": self.ctx}], lr=lr)
             else:
+                print('opoopopkkk')
                 opt = torch.optim.AdamW([{"params": params, "lr": lr}, {"params": self.ctx, "lr": 10*lr}, {"params": self.end_ctx, "lr": 10*lr}])
         else:
             opt = torch.optim.AdamW(params, lr=lr)
