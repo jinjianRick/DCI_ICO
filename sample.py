@@ -351,6 +351,23 @@ def main():
         default='same',
         help="the fine-tuned model used in dci whether the same one",
     )
+    parser.add_argument(
+        "--share_guidance",
+        default=True,
+        help="whether share classifier-free guidance for two branches",
+    )
+    parser.add_argument(
+        "--agg_time",
+        type=float,
+        default=0.3,
+        help="time ratio of DCI aggregation, 0 is no aggregation, 1 is full aggregation",
+    )
+    parser.add_argument(
+        "--agg_lambda",
+        type=float,
+        default=0,
+        help="aggregation strength of auxiliary branch, typically -2~2",
+    )
 
     opt = parser.parse_args()
 
@@ -383,8 +400,6 @@ def main():
         config.model.params.cond_stage_config.params = {}
         config.model.params.cond_stage_config.params.modifier_token = opt.modifier_token
     model = load_model_from_config(config, f"{opt.ckpt}", device = device)
-    if opt.use_dci:
-        model_ldm = model
 
     if opt.delta_ckpt is not None:
         delta_st = torch.load(opt.delta_ckpt)
@@ -420,15 +435,17 @@ def main():
 
     #device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
-    if opt.use_dci:
-        model_list = [model_ldm, model]
-    else:
-        model_list = model
 
     if opt.plms:
-        sampler = PLMSSampler(model_list, opt.dci_type)
+        if opt.use_dci:
+            sampler = PLMSSampler(model, opt.dci_type)
+        else:
+            sampler = PLMSSampler(model)
     else:
-        sampler = DDIMSampler(model_list, opt.dci_type)
+        if opt.use_dci:
+            sampler = DDIMSampler(model, opt.dci_type)
+        else:
+            sampler = DDIMSampler(model)
 
     if opt.delta_ckpt is not None:
         outpath = os.path.dirname(os.path.dirname(opt.delta_ckpt))
@@ -483,7 +500,7 @@ def main():
         mask_custom = opt.mask_custom.split(',')
         print('mask_custom', mask_custom)
         mask_custom = [int(i) for i in mask_custom]
-        extra_info = {'length_ldm': opt.length_ldm, 'length_custom': opt.length_custom, 'mask_ldm': mask_ldm, 'mask_custom': mask_custom}
+        extra_info = {'length_ldm': opt.length_ldm, 'length_custom': opt.length_custom, 'mask_ldm': mask_ldm, 'mask_custom': mask_custom, 'share_guidance': opt.share_guidance, 'agg_time': opt.agg_time, 'lambda': opt.agg_lambda}
     else:
         extra_info = None
 
@@ -506,7 +523,7 @@ def main():
                         c = model.get_learned_conditioning(prompts, index='test')
                         if opt.use_dci:
                             c_ldm = {}
-                            c_ldm['ldm'] = model_ldm.get_learned_conditioning(data_ldm[prompt_count])
+                            c_ldm['ldm'] = model.get_learned_conditioning(data_ldm[prompt_count])
                         else:
                             c_ldm=None
                        
