@@ -19,7 +19,7 @@ ECCV 2024
 </div>
 
 ## 📖 Abstract
-![results_of_multi_concept](figures/method_overview.pdf)
+![results_of_multi_concept](figures/method_overall.png)
 <p>
   Customized generation aims to incorporate a novel concept into a pre-trained text-to-image model, enabling new generations of the concept in novel contexts guided by textual prompts.
 However, customized generation suffers from an inherent trade-off between concept fidelity and editability, i.e., between precisely modeling the concept and faithfully adhering to the prompts.
