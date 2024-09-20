@@ -8,7 +8,7 @@ Our code is based on Stable Diffusion and Custom Diffusion
 <h1>Customized Generation Reimagined: Fidelity and Editability Harmonized</h1>
 
 
-[Jian Jin], [Yang Shen](https://aassxun.github.io/), [Zhenyong Fu]&#8224; [Jian Yang](https://zhenyangcs.github.io/](https://scholar.google.com.hk/citations?hl=zh-CN&user=6CIDtZQAAAAJ)&#8224; 
+Jian Jin, [Yang Shen](https://aassxun.github.io/), Zhenyong Fu&#8224; [Jian Yang](https://scholar.google.com.hk/citations?hl=zh-CN&user=6CIDtZQAAAAJ)&#8224; 
 
 (&#8224;corresponding author)
 
@@ -19,7 +19,7 @@ ECCV 2024
 </div>
 
 ## 📖 Abstract
-![results_of_multi_concept](figures/method_overview.png)
+![results_of_multi_concept](figures/method_overview.pdf)
 <p>
   Customized generation aims to incorporate a novel concept into a pre-trained text-to-image model, enabling new generations of the concept in novel contexts guided by textual prompts.
 However, customized generation suffers from an inherent trade-off between concept fidelity and editability, i.e., between precisely modeling the concept and faithfully adhering to the prompts.
