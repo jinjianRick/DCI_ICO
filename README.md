@@ -1,8 +1,3 @@
-
-Acknowledgement
-Our code is based on Stable Diffusion and Custom Diffusion
-
-
 <div align="center">
 
 <h1>Customized Generation Reimagined: Fidelity and Editability Harmonized</h1>
