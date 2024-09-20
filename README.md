@@ -8,11 +8,11 @@ Our code is based on Stable Diffusion and Custom Diffusion
 <h1>Customized Generation Reimagined: Fidelity and Editability Harmonized</h1>
 
 
-[Jian Jin], [Yang Shen]([https://volcverse.vercel.app](https://aassxun.github.io/), [Zhenyong Fu]&#8224; [Jian Yang]([https://zhenyangcs.github.io/](https://scholar.google.com.hk/citations?hl=zh-CN&user=6CIDtZQAAAAJ))&#8224; 
+[Jian Jin], [Yang Shen](https://aassxun.github.io/), [Zhenyong Fu]&#8224; [Jian Yang](https://zhenyangcs.github.io/](https://scholar.google.com.hk/citations?hl=zh-CN&user=6CIDtZQAAAAJ)&#8224; 
 
 (&#8224;corresponding author)
 
-[PCA Lab, Key Lab of Intelligent Perception and Systems for High-Dimensional Information of Ministry of Education, and Jiangsu Key Lab of Image and Video Understanding for Social Security, School of Computer Science and Engineering, Nanjing University of Science and Technology]
+PCA Lab, Key Lab of Intelligent Perception and Systems for High-Dimensional Information of Ministry of Education, and Jiangsu Key Lab of Image and Video Understanding for Social Security, School of Computer Science and Engineering, Nanjing University of Science and Technology
 
 ECCV 2024
 
